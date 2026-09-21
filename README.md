@@ -1,43 +1,72 @@
-# btc-developer-app
+# @iansaxton/btc-wallet-extension
 
-A small TypeScript wallet-extension integration for Bitcoin and EVM-compatible crypto applications.
+A dependency-free TypeScript client for connecting browser wallet extensions to Bitcoin and EVM applications. It is designed to be copied into an existing app or installed as a package with a minimal API.
 
-## Plug-and-play wallet extension
+## Install
 
-`src/wallet/walletExtensionPlugin.ts` detects installed browser extensions and connects using public identity data only:
+```bash
+npm install @iansaxton/btc-wallet-extension
+```
 
-- **EVM wallets**: MetaMask, Coinbase Wallet, Rabby, and other [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193) providers through `window.ethereum`.
-- **Bitcoin wallets**: UniSat-compatible extensions through `window.unisat`.
-
-No seed phrase, private key, API key, or automatic transfer is requested or stored.
+## Quick start
 
 ```ts
-import {
-  connectWalletExtension,
-  detectWalletExtensions,
-  toWalletRecord,
-  watchWalletExtension,
-} from './src/wallet/walletExtensionPlugin';
+import { createWalletClient } from '@iansaxton/btc-wallet-extension';
 
-const installed = detectWalletExtensions();
-const connection = await connectWalletExtension(installed.bitcoin ? 'bitcoin' : 'evm');
-const walletRecord = toWalletRecord(connection);
-console.log(walletRecord.address, connection.network);
+const wallet = createWalletClient();
 
-const stopWatching = watchWalletExtension(connection, () => {
-  // Clear cached address and ask the user to reconnect after an account/network change.
+if (!wallet.detect().bitcoin) {
+  throw new Error('Install a UniSat-compatible Bitcoin wallet first.');
+}
+
+const connection = await wallet.connect('bitcoin');
+console.log(connection.address, connection.network);
+
+const stopWatching = wallet.watch(connection, () => {
+  // Clear application state and ask the user to reconnect.
+});
+
+const walletRecord = wallet.toWalletRecord(connection, 'primary-wallet');
+```
+
+For MetaMask, Coinbase Wallet, Rabby, and other EIP-1193 providers, use `wallet.connect('evm')`.
+
+## API
+
+| API | Purpose |
+| --- | --- |
+| `createWalletClient(options?)` | Create a small state-light client. |
+| `client.detect()` | Detect installed EVM and Bitcoin providers without prompting. |
+| `client.connect('bitcoin' | 'evm')` | Request the public address and network from the wallet. |
+| `client.watch(connection, callback)` | Watch account/network changes and return an unsubscribe function. |
+| `client.toWalletRecord(connection, id?)` | Adapt the connection to the existing WalletManager record shape. |
+| `connectWalletExtension(...)` | Functional equivalent for direct use. |
+
+### SSR, testing, and custom bridges
+
+Providers can be injected, which makes the package safe to use in SSR and deterministic tests:
+
+```ts
+const wallet = createWalletClient({
+  providers: {
+    ethereum: myEip1193Provider,
+    unisat: myUnisatProvider,
+  },
 });
 ```
 
-## Integration boundary
+## Safety boundary
 
-This plugin intentionally stops at wallet discovery and public-address connection. A payout or transaction-signing flow must be implemented separately, display the exact transaction to the user, and require the wallet extension's own confirmation prompt. Do not put private keys or seed phrases into this repository or into server environment variables.
+This package reads public wallet identity only. It does **not** request or store seed phrases, private keys, API keys, or signing authority. It does not send transactions, transfer funds, or perform payouts. Any future signing flow must display the exact transaction and use the wallet extension's own confirmation prompt.
 
-The existing cashout code is a placeholder and must not be treated as a real transfer implementation until it is replaced with a chain-specific, user-confirmed transaction flow.
+The repository's existing cashout implementation is a placeholder and must not be treated as a real transfer implementation.
 
-## Build
+## Development
 
 ```bash
 npm install
-npm run build
+npm test
+npm run pack:check
 ```
+
+The package is built to `dist/` with CommonJS output and TypeScript declarations. The published package contains only `dist/`, `README.md`, and `LICENSE`.

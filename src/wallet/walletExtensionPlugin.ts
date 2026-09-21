@@ -1,8 +1,8 @@
 /**
  * Plug-and-play browser wallet extension adapter.
  *
- * Safety boundary: this module only requests the connected public address and
- * network. It never asks for seed phrases, private keys, or signing authority.
+ * This package reads public wallet identity only. It never requests or stores
+ * seed phrases, private keys, API keys, or transaction-signing authority.
  */
 
 export type WalletChain = 'evm' | 'bitcoin';
@@ -32,6 +32,11 @@ export interface WalletExtensionWindow {
   unisat?: UnisatProvider;
 }
 
+export interface WalletClientOptions {
+  /** Optional providers, useful for SSR, testing, and custom extension bridges. */
+  providers?: WalletExtensionWindow;
+}
+
 export class WalletExtensionError extends Error {
   constructor(message: string) {
     super(message);
@@ -39,31 +44,35 @@ export class WalletExtensionError extends Error {
   }
 }
 
-function browserWindow(): WalletExtensionWindow {
-  if (typeof window === 'undefined') {
-    throw new WalletExtensionError('Wallet extensions are only available in a browser.');
-  }
+function browserProviders(): WalletExtensionWindow {
+  if (typeof window === 'undefined') return {};
   return window as unknown as WalletExtensionWindow;
 }
 
-/**
- * Detect installed providers without loading third-party SDKs.
- */
-export function detectWalletExtensions(): { evm: boolean; bitcoin: boolean } {
-  const current = typeof window === 'undefined' ? {} : browserWindow();
+function resolveProviders(providers?: WalletExtensionWindow): WalletExtensionWindow {
+  return providers || browserProviders();
+}
+
+/** Detect installed providers without triggering a wallet permission prompt. */
+export function detectWalletExtensions(providers?: WalletExtensionWindow): {
+  evm: boolean;
+  bitcoin: boolean;
+} {
+  const current = resolveProviders(providers);
   return { evm: Boolean(current.ethereum), bitcoin: Boolean(current.unisat) };
 }
 
 /**
- * Connect to an installed wallet extension and return only public identity data.
- * Pass chain='evm' for MetaMask, Coinbase Wallet, Rabby, etc.; pass
- * chain='bitcoin' for UniSat-compatible Bitcoin extensions.
+ * Connect to an installed wallet extension and return public identity data.
+ * EVM covers EIP-1193 wallets such as MetaMask, Coinbase Wallet, and Rabby.
+ * Bitcoin covers UniSat-compatible extensions.
  */
 export async function connectWalletExtension(
   chain: WalletChain,
-  preferredProvider?: Eip1193Provider | UnisatProvider
+  preferredProvider?: Eip1193Provider | UnisatProvider,
+  providers?: WalletExtensionWindow
 ): Promise<WalletConnection> {
-  const current = browserWindow();
+  const current = resolveProviders(providers);
 
   if (chain === 'bitcoin') {
     const provider = (preferredProvider || current.unisat) as UnisatProvider | undefined;
@@ -89,27 +98,24 @@ export async function connectWalletExtension(
   return { provider: 'eip1193', chain, address, network: chainId };
 }
 
-/**
- * Subscribe to account/network changes so the application can clear stale
- * wallet state. The returned function removes the listeners when supported.
- */
+/** Subscribe to account/network changes; returns an unsubscribe function. */
 export function watchWalletExtension(
   connection: WalletConnection,
   onChange: (...args: unknown[]) => void,
   providers?: WalletExtensionWindow
 ): () => void {
-  const current = providers || browserWindow();
+  const current = resolveProviders(providers);
   const provider = connection.provider === 'unisat' ? current.unisat : current.ethereum;
   if (!provider?.on) return () => undefined;
 
-  const events = connection.provider === 'unisat' ? ['accountsChanged', 'networkChanged'] : ['accountsChanged', 'chainChanged'];
+  const events = connection.provider === 'unisat'
+    ? ['accountsChanged', 'networkChanged']
+    : ['accountsChanged', 'chainChanged'];
   events.forEach((event) => provider.on?.(event, onChange));
   return () => events.forEach((event) => provider.removeListener?.(event, onChange));
 }
 
-/**
- * Convert a connection into the existing WalletManager-compatible record.
- */
+/** Adapt a connection to the existing WalletManager-compatible record shape. */
 export function toWalletRecord(connection: WalletConnection, id = 'browser-wallet') {
   return {
     id,
@@ -120,6 +126,40 @@ export function toWalletRecord(connection: WalletConnection, id = 'browser-walle
   };
 }
 
+/**
+ * Convenient state-light client for UI code:
+ *
+ * const wallet = createWalletClient();
+ * const connection = await wallet.connect('bitcoin');
+ */
+export class WalletExtensionClient {
+  private readonly providers?: WalletExtensionWindow;
+
+  constructor(options: WalletClientOptions = {}) {
+    this.providers = options.providers;
+  }
+
+  detect() {
+    return detectWalletExtensions(this.providers);
+  }
+
+  connect(chain: WalletChain) {
+    return connectWalletExtension(chain, undefined, this.providers);
+  }
+
+  watch(connection: WalletConnection, onChange: (...args: unknown[]) => void) {
+    return watchWalletExtension(connection, onChange, this.providers);
+  }
+
+  toWalletRecord(connection: WalletConnection, id?: string) {
+    return toWalletRecord(connection, id);
+  }
+}
+
+export function createWalletClient(options?: WalletClientOptions) {
+  return new WalletExtensionClient(options);
+}
+
 declare global {
   interface Window {
     ethereum?: Eip1193Provider;
@@ -127,4 +167,4 @@ declare global {
   }
 }
 
-export default connectWalletExtension;
+export default createWalletClient;
