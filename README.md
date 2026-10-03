@@ -5,7 +5,7 @@ A dependency-free TypeScript client for connecting browser wallet extensions to 
 ## Install
 
 ```bash
-npm install @iansaxton/btc-wallet-extension
+npm install github:iansaxton003-hash/btc-developer-app
 ```
 
 ## Quick start
