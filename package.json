@@ -1,6 +1,6 @@
 {
   "name": "@iansaxton/btc-wallet-extension",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Plug-and-play public wallet-extension client for Bitcoin and EVM wallets",
   "license": "MIT",
   "repository": {
@@ -10,8 +10,20 @@
   "bugs": {
     "url": "https://github.com/iansaxton003-hash/btc-developer-app/issues"
   },
-  "keywords": ["bitcoin", "wallet", "wallet-extension", "metamask", "unisat", "eip-1193", "web3"],
-  "files": ["dist", "README.md", "LICENSE"],
+  "keywords": [
+    "bitcoin",
+    "wallet",
+    "wallet-extension",
+    "metamask",
+    "unisat",
+    "eip-1193",
+    "web3"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

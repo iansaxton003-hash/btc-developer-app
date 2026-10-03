@@ -1,6 +1,6 @@
 # @iansaxton/btc-wallet-extension
 
-A dependency-free TypeScript client for connecting browser wallet extensions to Bitcoin and EVM applications. It is designed to be copied into an existing app or installed as a package with a minimal API.
+A dependency-free TypeScript client for connecting browser wallet extensions to Bitcoin, EVM, Solana, and other non-EVM applications. It is designed to be copied into an existing app or installed as a package with a minimal API.
 
 ## Install
 
@@ -31,15 +31,43 @@ const walletRecord = wallet.toWalletRecord(connection, 'primary-wallet');
 
 For MetaMask, Coinbase Wallet, Rabby, and other EIP-1193 providers, use `wallet.connect('evm')`.
 
+For Phantom-style Solana extensions:
+
+```ts
+const connection = await wallet.connect('solana');
+console.log(connection.address, connection.network); // mainnet-beta by default
+```
+
+## Other non-EVM chains
+
+Register an adapter when the chain has its own browser-wallet API. The package does not guess or call unknown wallet methods:
+
+```ts
+const wallet = createWalletClient({
+  adapters: [{
+    id: 'cardano-wallet',
+    chain: 'cardano',
+    connect: async () => ({
+      address: await getCardanoAddressFromYourSdk(),
+      network: 'mainnet',
+    }),
+  }],
+});
+
+const connection = await wallet.connect('cardano');
+```
+
+A custom adapter can also expose `on('accountChanged', handler)` and `on('networkChanged', handler)` so `wallet.watch()` works automatically.
+
 ## API
 
 | API | Purpose |
 | --- | --- |
 | `createWalletClient(options?)` | Create a small state-light client. |
-| `client.detect()` | Detect installed EVM and Bitcoin providers without prompting. |
-| `client.connect('bitcoin' | 'evm')` | Request the public address and network from the wallet. |
+| `client.detect()` | Detect installed EVM, Bitcoin, and Solana providers plus registered adapters. |
+| `client.connect('bitcoin' | 'evm' | 'solana' | 'custom-chain')` | Request the public address and network from the wallet. |
 | `client.watch(connection, callback)` | Watch account/network changes and return an unsubscribe function. |
-| `client.toWalletRecord(connection, id?)` | Adapt the connection to the existing WalletManager record shape. |
+| `client.toWalletRecord(connection, id?)` | Adapt the connection to a simple wallet record shape. |
 | `connectWalletExtension(...)` | Functional equivalent for direct use. |
 
 ### SSR, testing, and custom bridges
@@ -51,6 +79,7 @@ const wallet = createWalletClient({
   providers: {
     ethereum: myEip1193Provider,
     unisat: myUnisatProvider,
+    solana: mySolanaProvider,
   },
 });
 ```

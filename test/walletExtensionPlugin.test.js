@@ -19,7 +19,7 @@ test('connects to an injected EVM provider', async () => {
     },
   };
   const wallet = createWalletClient({ providers });
-  assert.deepEqual(wallet.detect(), { evm: true, bitcoin: false });
+  assert.deepEqual(wallet.detect(), { evm: true, bitcoin: false, solana: false });
   const connection = await wallet.connect('evm');
   assert.equal(connection.address, '0xabc');
   assert.equal(connection.network, '0x1');
@@ -41,8 +41,39 @@ test('connects to an injected Bitcoin provider', async () => {
   assert.equal(toWalletRecord(connection).type, 'bitcoin');
 });
 
+test('connects to an injected Solana provider', async () => {
+  const wallet = createWalletClient({
+    providers: {
+      solana: {
+        connect: async () => ({ publicKey: { toString: () => 'So1anaPublicKey' } }),
+        network: 'devnet',
+      },
+    },
+  });
+  assert.equal(wallet.detect().solana, true);
+  const connection = await wallet.connect('solana');
+  assert.equal(connection.address, 'So1anaPublicKey');
+  assert.equal(connection.network, 'devnet');
+});
+
+test('connects through a custom non-EVM adapter', async () => {
+  const wallet = createWalletClient({
+    adapters: [{
+      id: 'cardano-wallet',
+      chain: 'cardano',
+      connect: async () => ({ address: 'addr_test1example', network: 'testnet' }),
+    }],
+  });
+  assert.equal(wallet.detect()['cardano-wallet'], true);
+  const connection = await wallet.connect('cardano');
+  assert.equal(connection.provider, 'custom');
+  assert.equal(connection.address, 'addr_test1example');
+  assert.equal(connection.adapterId, 'cardano-wallet');
+});
+
 test('returns an actionable error when no provider is installed', async () => {
   const wallet = createWalletClient({ providers: {} });
   await assert.rejects(() => wallet.connect('bitcoin'), WalletExtensionError);
+  await assert.rejects(() => wallet.connect('solana'), /Solana/);
   await assert.rejects(() => wallet.connect('evm'), /EIP-1193/);
 });
